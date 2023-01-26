@@ -144,8 +144,8 @@
     "@libp2p/interface-transport": "^2.0.0",
     "@libp2p/logger": "^2.0.0",
     "@libp2p/peer-id": "^1.1.15",
-    "@multiformats/multiaddr": "../libp2p/js-multiaddr",
-    "@multiformats/mafmt": "../libp2p/js-mafmt",
+    "@multiformats/mafmt": "^11.0.3",
+    "@multiformats/multiaddr": "file:/home/vmx/src/js/webrtc/js-multiaddr",
     "@protobuf-ts/runtime": "^2.8.0",
     "err-code": "^3.0.1",
     "it-handshake": "^4.1.2",
@@ -174,7 +174,7 @@
     "@types/uuid": "^8.3.4",
     "aegir": "^37.6.6",
     "it-first": "^2.0.0",
-    "libp2p": "file:../js-libp2p",
+    "libp2p": "^0.40.0",
     "protons": "^6.0.1"
   }
 }

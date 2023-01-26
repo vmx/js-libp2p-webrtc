@@ -13,11 +13,12 @@ export class DataChannelMuxerFactory implements StreamMuxerFactory {
 
   constructor (peerConnection: RTCPeerConnection, readonly protocol = '/webrtc') {
     this.peerConnection = peerConnection
-    // reject any datachannels as the muxer is not yet ready to process
-    // streams
-    this.peerConnection.ondatachannel = ({ channel }) => {
-      channel.close()
-    }
+    //// reject any datachannels as the muxer is not yet ready to process
+    //// streams
+    //this.peerConnection.ondatachannel = ({ channel }) => {
+    //  console.log('vmx: muxer: closing channel')
+    //  channel.close()
+    //}
   }
 
   createStreamMuxer (init?: StreamMuxerInit | undefined): StreamMuxer {
@@ -77,6 +78,7 @@ export class DataChannelMuxer implements StreamMuxer {
      * {@link https://developer.mozilla.org/en-US/docs/Web/API/RTCPeerConnection/datachannel_event}
      */
     this.peerConnection.ondatachannel = ({ channel }) => {
+      console.log('vmx: muxer: a new data channel was created')
       const stream = new WebRTCStream({
         channel,
         stat: {
@@ -99,6 +101,7 @@ export class DataChannelMuxer implements StreamMuxer {
    * provided, the id of the stream will be used.
    */
   newStream (name: string = ''): Stream {
+    console.log('vmx: muxer: a new stream gets started')
     const channel = this.peerConnection.createDataChannel(name)
     const stream = new WebRTCStream({
       channel,

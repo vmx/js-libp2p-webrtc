@@ -354,6 +354,7 @@ export class WebRTCStream implements Stream {
     * Close a stream for reading and writing
     */
    async close (): Promise<void> {
+     console.log('vmx: stream: close')
      if (this.channel.readyState === 'closed') {
        return
      }

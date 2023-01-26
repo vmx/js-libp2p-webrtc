@@ -17,7 +17,7 @@ import { DataChannelMuxerFactory } from './muxer.js'
 import type { WebRTCDialOptions } from './options.js'
 import * as sdp from './sdp.js'
 import { WebRTCStream } from './stream.js'
-import * as mafmt from '@multiformats/mafmt'
+//import * as mafmt from '@multiformats/mafmt'
 // import { EventEmitter } from '@libp2p/interfaces/events'
 
 const log = logger('libp2p:webrtc:transport')
@@ -200,6 +200,7 @@ export class WebRTCTransport implements Transport {
 
     // For outbound connections, the remote is expected to start the noise handshake.
     // Therefore, we need to secure an inbound noise connection from the remote.
+    // @ts-ignore
     await noise.secureInbound(myPeerId, wrappedDuplex, theirPeerId)
     // maConn.remoteAddr = maConn.remoteAddr.decapsulateCode(421).encapsulate(multiaddr(`/p2p/${secureConn.remotePeer}`))
 
@@ -242,7 +243,9 @@ export class WebRTCTransport implements Transport {
  * a Certhash Code (466) and a PeerId
  */
 function validMa (ma: Multiaddr): boolean {
-  return mafmt.WebRTC.matches(ma)
+  //return mafmt.WebRTC.matches(ma)
+  const codes = ma.protoCodes()
+  return codes.includes(WEBRTC_CODE) && codes.includes(CERTHASH_CODE) && ma.getPeerId() != null
 }
 
 /**
