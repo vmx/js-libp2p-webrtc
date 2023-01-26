@@ -66,14 +66,16 @@ console.log('vmx: listener: multiaddrs:', listener.getMultiaddrs())
 console.log('vmx: dialer peers:', dialer.peerId.toString(), dialer.getPeers()[0].toString())
 console.log('vmx: listener peers:', listener.peerId.toString(), listener.getPeers()[0].toString())
 
-console.log(`vmx: peer connected dialer: '${dialer.getConnections().map(c => c.remoteAddr.toString())}'`)
-console.log(`vmx: peer connected listener: '${listener.getConnections().map(c => c.remoteAddr.toString())}'`)
+//console.log(`vmx: peer connected dialer: '${dialer.getConnections().map(c => c.remoteAddr.toString())}'`)
+//console.log(`vmx: peer connected listener: '${listener.getConnections().map(c => c.remoteAddr.toString())}'`)
+console.log('vmx: peer connected dialer:', dialer.getConnections().map(c => c))
+console.log('vmx: peer connected listener:', listener.getConnections().map(c => c))
 
-const stream = await dialer.dialProtocol(listenerAddresses[0], ['/echo/1.0.0'])
-console.log('vmx: echo stream:', stream)
+//const stream = await dialer.dialProtocol(listenerAddresses[0], ['/echo/1.0.0'])
+//console.log('vmx: echo stream:', stream)
 
-//const pingListenerLatency = await dialer.ping(listenerAddresses[0])
-//console.log('vmx: ping listener latency:', pingListenerLatency)
+const pingListenerLatency = await dialer.ping(listenerAddresses[0])
+console.log('vmx: ping listener latency:', pingListenerLatency)
 
 
 //// Let's also try the connection the other way round
