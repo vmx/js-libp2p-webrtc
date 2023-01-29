@@ -20,6 +20,8 @@ export const CODE = 281
 
 const SHA2_256 = 0x12
 const CERTHASH = 466
+// Multiaddress protocol used to transmit custom information.
+const MEMORY = 777
 const UFRAG = 'myufragalwaysthesame'
 
 /**
@@ -328,8 +330,7 @@ export class WebRTCPeerTransport implements Transport, Startable {
         .map(addPeerId)
         .map((address: Multiaddr) => {
           // TODO vmx 2023-01-25: check if it makes sense to use `receiver` here.
-          //return address.encapsulate('/webrtc-initiator')
-          return address.encapsulate('/webrtc-receiver')
+          return address.encapsulate('/memory/receiver')
         })
       await this.components.transportManager.listen(this.initiatorAddresses)
     //} else {
@@ -338,8 +339,7 @@ export class WebRTCPeerTransport implements Transport, Startable {
         .map(addPeerId)
         .map((address: Multiaddr) => {
           // TODO vmx 2023-01-25: check if it makes sense to use `receiver` here.
-          //return address.encapsulate('/webrtc-receiver')
-          return address.encapsulate('/webrtc-initiator')
+          return address.encapsulate('/memory/initiator')
         })
       await this.components.transportManager.listen(this.receiverAddresses)
     //}
@@ -386,24 +386,34 @@ export class WebRTCPeerTransport implements Transport, Startable {
   async dial (ma: Multiaddr, options: DialOptions): Promise<Connection> {
     console.log('vmx: peer transport: transport: dial: am i callled?', ma.protoNames())
 
-    const protoNames = ma.protoNames()
+    const connectionType = ma.stringTuples().filter(([protocol, value]) => {
+      return protocol === MEMORY
+    }).map(([_protocol, value]) => {
+      return value
+    })[0]
+    console.log('vmx: connection type:', connectionType)
 
     let pc
-    if (protoNames.includes('webrtc-initiator')) {
-      console.log('vmx: dial: webrtc-initiator: is initiator:', this.init.isInitiator)
-      const offer = mungeOffer(ma)
-      await this.initiator?.connection.setRemoteDescription(offer)
-      await this.initiator?.connection.createAnswer()
-      const answer = mungeAnswer(this.initiatorAddresses!)
-      await this.initiator?.connection.setLocalDescription(answer)
-      pc = this.initiator!.connection
-    } else if (protoNames.includes('webrtc-receiver')) {
-      console.log('vmx: dial: webrtc-receiver: is initiator:', this.init.isInitiator)
-      const answer = mungeAnswer([ma])
-      await this.receiver?.connection.setRemoteDescription(answer)
-      pc = this.receiver!.connection
-    } else {
-      throw new Error('unsupported webrtc connection mode')
+    switch (connectionType) {
+      case 'initiator': {
+        console.log('vmx: dial: webrtc-initiator: is initiator:', this.init.isInitiator)
+        const offer = mungeOffer(ma)
+        await this.initiator?.connection.setRemoteDescription(offer)
+        await this.initiator?.connection.createAnswer()
+        const answer = mungeAnswer(this.initiatorAddresses!)
+        await this.initiator?.connection.setLocalDescription(answer)
+        pc = this.initiator!.connection
+        break
+      }
+      case 'receiver': {
+        console.log('vmx: dial: webrtc-receiver: is initiator:', this.init.isInitiator)
+        const answer = mungeAnswer([ma])
+        await this.receiver?.connection.setRemoteDescription(answer)
+        pc = this.receiver!.connection
+        break
+      }
+      default:
+        throw new Error('unsupported webrtc connection mode')
     }
 
     const result = options.upgrader.upgradeOutbound(

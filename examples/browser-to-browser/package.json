@@ -16,8 +16,5 @@
     "@libp2p/interface-transport": "^2.1.0",
     "@libp2p/webrtc": "file:../../",
     "libp2p": "^0.42.0"
-  },
-  "overrides": {
-    "@multiformats/multiaddr": "file:./js-multiaddr"
   }
 }
