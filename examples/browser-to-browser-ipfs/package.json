@@ -1,0 +1,22 @@
+{
+  "name": "munging-libp2p",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "devDependencies": {
+    "vite": "^4.0.0"
+  },
+  "dependencies": {
+    "@chainsafe/libp2p-gossipsub": "^6.1.0",
+    "@libp2p/interface-transport": "^2.1.0",
+    "@libp2p/webrtc": "file:../../",
+    "ipfs-core": "^0.18.0",
+    "libp2p": "^0.42.0",
+    "libp2p-gossipsub": "^0.13.0"
+  }
+}
