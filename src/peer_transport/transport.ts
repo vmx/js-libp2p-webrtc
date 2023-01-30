@@ -38,10 +38,6 @@ export const WEBRTC_CODE: number = 280
  */
 export const CERTHASH_CODE: number = 466
 
-export interface WebRTCPeerTransportInit {
-  isInitiator?: boolean
-}
-
 export interface WebRTCPeerTransportComponents {
   peerId: PeerId
   registrar: Registrar
@@ -307,7 +303,6 @@ export class WebRTCPeerTransport implements Transport, Startable {
 
   constructor (
     private readonly components: WebRTCPeerTransportComponents,
-    private readonly init: WebRTCPeerTransportInit
   ) {}
 
   isStarted () {
@@ -315,8 +310,6 @@ export class WebRTCPeerTransport implements Transport, Startable {
   }
 
   async start () {
-    console.log('vmx: isInitiator:', this.init.isInitiator)
-
     const addPeerId = (address: Multiaddr) => {
       return address.encapsulate(`/p2p/${this.components.peerId}`)
     }
@@ -324,25 +317,22 @@ export class WebRTCPeerTransport implements Transport, Startable {
     // Create two connections, one will be used to initiate a connection to the
     // other peer, and the other one will be used to connect to another peer
     // that initiated the connection.
-    //if (this.init.isInitiator) {
-      this.initiator = await createConnection()
-      this.initiatorAddresses = (await createMultiaddrs(this.initiator.connection))
-        .map(addPeerId)
-        .map((address: Multiaddr) => {
-          // TODO vmx 2023-01-25: check if it makes sense to use `receiver` here.
-          return address.encapsulate('/memory/receiver')
-        })
-      await this.components.transportManager.listen(this.initiatorAddresses)
-    //} else {
-      this.receiver = await createConnection()
-      this.receiverAddresses = (await createMultiaddrs(this.receiver.connection))
-        .map(addPeerId)
-        .map((address: Multiaddr) => {
-          // TODO vmx 2023-01-25: check if it makes sense to use `receiver` here.
-          return address.encapsulate('/memory/initiator')
-        })
-      await this.components.transportManager.listen(this.receiverAddresses)
-    //}
+    this.initiator = await createConnection()
+    this.initiatorAddresses = (await createMultiaddrs(this.initiator.connection))
+      .map(addPeerId)
+      .map((address: Multiaddr) => {
+        // TODO vmx 2023-01-25: check if it makes sense to use `receiver` here.
+        return address.encapsulate('/memory/receiver')
+      })
+    await this.components.transportManager.listen(this.initiatorAddresses)
+    this.receiver = await createConnection()
+    this.receiverAddresses = (await createMultiaddrs(this.receiver.connection))
+      .map(addPeerId)
+      .map((address: Multiaddr) => {
+        // TODO vmx 2023-01-25: check if it makes sense to use `receiver` here.
+        return address.encapsulate('/memory/initiator')
+      })
+    await this.components.transportManager.listen(this.receiverAddresses)
 
     console.log('vmx: transport: it should listen to some addresses now')
 
@@ -396,7 +386,6 @@ export class WebRTCPeerTransport implements Transport, Startable {
     let pc
     switch (connectionType) {
       case 'initiator': {
-        console.log('vmx: dial: webrtc-initiator: is initiator:', this.init.isInitiator)
         const offer = mungeOffer(ma)
         await this.initiator?.connection.setRemoteDescription(offer)
         await this.initiator?.connection.createAnswer()
@@ -406,7 +395,6 @@ export class WebRTCPeerTransport implements Transport, Startable {
         break
       }
       case 'receiver': {
-        console.log('vmx: dial: webrtc-receiver: is initiator:', this.init.isInitiator)
         const answer = mungeAnswer([ma])
         await this.receiver?.connection.setRemoteDescription(answer)
         pc = this.receiver!.connection
