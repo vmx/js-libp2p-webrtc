@@ -47,7 +47,7 @@ export interface WebRTCPeerTransportComponents {
   peerStore: PeerStore
 }
 
-const createConnection = async () => {
+const createConnection = async (type: string) => {
   const certificate = await RTCPeerConnection.generateCertificate({
     name: 'ECDSA',
     // @ts-ignore
@@ -77,7 +77,7 @@ const createConnection = async () => {
     //dataChannel.send("This message was sent as a data channel was opened")
   })
   dataChannel.addEventListener('message', (event) => {
-    console.log(`vmx: data channel received:`, event.data)
+    console.log(`vmx: data channel received: ${type}`, event.data)
   })
 
   return { connection, dataChannel }
@@ -137,6 +137,26 @@ const waitForIceCandidates = (connection: RTCPeerConnection): Promise<RTCIceCand
       } else {
         resolve(candidates)
       }
+    })
+  })
+}
+
+//const waitForConnected = (connection: RTCPeerConnection): Promise<void> => {
+//  return new Promise((resolve, _reject) => {
+//    connection.addEventListener('iceconnectionstatechange', () => {
+//      console.log('vmx: wait for connected:', connection.iceConnectionState)
+//      if (connection.iceConnectionState === 'completed') {
+//        resolve()
+//      }
+//    })
+//  })
+//}
+
+const waitForDataChannelOpen = (dataChannel: RTCDataChannel): Promise<void> => {
+  return new Promise((resolve, _reject) => {
+    dataChannel.addEventListener('open', () => {
+      console.log('vmx: wait for open')
+      resolve()
     })
   })
 }
@@ -317,7 +337,7 @@ export class WebRTCPeerTransport implements Transport, Startable {
     // Create two connections, one will be used to initiate a connection to the
     // other peer, and the other one will be used to connect to another peer
     // that initiated the connection.
-    this.initiator = await createConnection()
+    this.initiator = await createConnection('initiator')
     this.initiatorAddresses = (await createMultiaddrs(this.initiator.connection))
       .map(addPeerId)
       .map((address: Multiaddr) => {
@@ -325,7 +345,7 @@ export class WebRTCPeerTransport implements Transport, Startable {
         return address.encapsulate('/memory/receiver')
       })
     await this.components.transportManager.listen(this.initiatorAddresses)
-    this.receiver = await createConnection()
+    this.receiver = await createConnection('receiver')
     this.receiverAddresses = (await createMultiaddrs(this.receiver.connection))
       .map(addPeerId)
       .map((address: Multiaddr) => {
@@ -376,6 +396,8 @@ export class WebRTCPeerTransport implements Transport, Startable {
   async dial (ma: Multiaddr, options: DialOptions): Promise<Connection> {
     console.log('vmx: peer transport: transport: dial: am i callled?', ma.protoNames())
 
+    //await new Promise(r => setTimeout(r, 2000));
+
     const connectionType = ma.stringTuples().filter(([protocol, value]) => {
       return protocol === MEMORY
     }).map(([_protocol, value]) => {
@@ -384,6 +406,7 @@ export class WebRTCPeerTransport implements Transport, Startable {
     console.log('vmx: connection type:', connectionType)
 
     let pc
+    let dc
     switch (connectionType) {
       case 'initiator': {
         const offer = mungeOffer(ma)
@@ -392,17 +415,23 @@ export class WebRTCPeerTransport implements Transport, Startable {
         const answer = mungeAnswer(this.initiatorAddresses!)
         await this.initiator?.connection.setLocalDescription(answer)
         pc = this.initiator!.connection
+        dc = this.initiator!.dataChannel
         break
       }
       case 'receiver': {
         const answer = mungeAnswer([ma])
         await this.receiver?.connection.setRemoteDescription(answer)
         pc = this.receiver!.connection
+        dc = this.receiver!.dataChannel
         break
       }
       default:
         throw new Error('unsupported webrtc connection mode')
     }
+
+    //await waitForConnected(pc)
+    await waitForDataChannelOpen(dc)
+    console.log('vmx: about to upgrade outbound connection')
 
     const result = options.upgrader.upgradeOutbound(
       new WebRTCMultiaddrConnection({

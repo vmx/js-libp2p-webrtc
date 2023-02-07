@@ -14,6 +14,7 @@
   "dependencies": {
     "@chainsafe/libp2p-gossipsub": "^6.1.0",
     "@libp2p/interface-transport": "^2.1.0",
+    "@libp2p/peer-id": "^2.0.1",
     "@libp2p/webrtc": "file:../../",
     "ipfs-core": "^0.18.0",
     "libp2p": "^0.42.0",

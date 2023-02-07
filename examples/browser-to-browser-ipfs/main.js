@@ -4,6 +4,7 @@ import { FaultTolerance } from '@libp2p/interface-transport'
 import * as IPFS from 'ipfs-core'
 import { gossipsub } from '@chainsafe/libp2p-gossipsub'
 import { plaintext } from 'libp2p/insecure'
+import { peerIdFromString } from '@libp2p/peer-id'
 
 // Multiaddress protocol used to transmit custom information.
 const MEMORY = 777
@@ -59,20 +60,36 @@ const ipfsDialer = await IPFS.create({
 
 // Only include addresses of the initiator.
 const listenerAddresses = (await ipfsListener.swarm.localAddrs()).filter((address) => {
- return address.stringTuples().some(([protocol, value]) => {
-   return protocol === MEMORY && value === 'initiator'
- })
+// return address.stringTuples().some(([protocol, value]) => {
+//   return protocol === MEMORY && value === 'initiator'
+// })
+  return true
 })
-console.log('vmx: listener addresses:', listenerAddresses)
+console.log('vmx: listener addresses:', listenerAddresses.map((address) => address.toString()))
 // TODO vmx 2023-01-28: dial all addresses.
-await ipfsDialer.swarm.connect(listenerAddresses[0])
+//const connection1 = ipfsDialer.swarm.connect(listenerAddresses[0])
+//const connection2 = ipfsDialer.swarm.connect(listenerAddresses[1])
+//await connection1
+//await connection2
+
+
+console.log('vmx: address book:', ipfsDialer.libp2p.peerStore.addressBook)
+const listenerPeerId = peerIdFromString(listenerAddresses[0].getPeerId())
+console.log('vmx: peerid:', listenerPeerId)
+await ipfsDialer.libp2p.peerStore.addressBook.add(listenerPeerId, listenerAddresses)
+const connection1 = ipfsDialer.swarm.connect(listenerPeerId)
+await connection1
+
+
+/*
 
 
 // Only include addresses of the receiver.
 const dialerAddresses = (await ipfsDialer.swarm.localAddrs()).filter((address) => {
- return address.stringTuples().some(([protocol, value]) => {
-   return protocol == MEMORY && value === 'receiver'
- })
+// return address.stringTuples().some(([protocol, value]) => {
+//   return protocol == MEMORY && value === 'receiver'
+// })
+  return true
 })
 console.log('vmx: dialer addresses:', dialerAddresses)
 // TODO vmx 2023-01-28: dial all addresses.
@@ -115,4 +132,4 @@ await waitForPeersSubscribed(ipfsDialer, 1, topic);
 const message = new TextEncoder().encode('sending over some message.')
 await ipfsDialer.pubsub.publish(topic, message)
 
-
+*/
