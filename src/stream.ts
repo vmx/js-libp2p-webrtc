@@ -253,8 +253,7 @@ export class WebRTCStream implements Stream {
      const self = this
 
      // reader pipe
-     this.channel.onmessage = async ({ data: d }) => {
-       const data = await d.arrayBuffer()
+     this.channel.onmessage = async ({ data }) => {
        if (data.byteLength === 0) {
          return
        }

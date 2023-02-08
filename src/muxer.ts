@@ -79,6 +79,8 @@ export class DataChannelMuxer implements StreamMuxer {
      */
     this.peerConnection.ondatachannel = ({ channel }) => {
       console.log('vmx: muxer: a new data channel was created')
+      // Firefox defaults to `blob`, while Chromium doesn't support it.
+      channel.binaryType = 'arraybuffer'
       const stream = new WebRTCStream({
         channel,
         stat: {
@@ -103,6 +105,8 @@ export class DataChannelMuxer implements StreamMuxer {
   newStream (name: string = ''): Stream {
     console.log('vmx: muxer: a new stream gets started')
     const channel = this.peerConnection.createDataChannel(name)
+    // Firefox defaults to `blob`, while Chromium doesn't support it.
+    channel.binaryType = 'arraybuffer'
     const stream = new WebRTCStream({
       channel,
       stat: {

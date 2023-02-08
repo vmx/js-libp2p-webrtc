@@ -125,6 +125,8 @@ export class WebRTCTransport implements Transport {
     // the peer.
     const dataChannelOpenPromise = defer()
     const handshakeDataChannel = peerConnection.createDataChannel('handshake', { negotiated: true, id: 0 })
+    // Firefox defaults to `blob`, while Chromium doesn't support it.
+    handshakeDataChannel.binaryType = 'arraybuffer'
     const handhsakeTimeout = setTimeout(() => {
       const error = `Data channel was never opened: state: ${handshakeDataChannel.readyState}`
       log.error(error)

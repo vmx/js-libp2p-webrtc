@@ -22,7 +22,7 @@ const SHA2_256 = 0x12
 const CERTHASH = 466
 // Multiaddress protocol used to transmit custom information.
 const MEMORY = 777
-const UFRAG = 'myufragalwaysthesame'
+const UFRAG = 'hard-coded-ufrag-to-make-munging-easier'
 
 /**
  * Created by converting the hexadecimal protocol code to an integer.
@@ -47,7 +47,7 @@ export interface WebRTCPeerTransportComponents {
   peerStore: PeerStore
 }
 
-const createConnection = async (type: string) => {
+const createConnection = async () => {
   const certificate = await RTCPeerConnection.generateCertificate({
     name: 'ECDSA',
     // @ts-ignore
@@ -72,12 +72,14 @@ const createConnection = async (type: string) => {
     negotiated: true,
     id: 0
   })
+  // Firefox defaults to `blob`, while Chromium doesn't support it.
+  dataChannel.binaryType = 'arraybuffer'
   dataChannel.addEventListener("open", (event) => {
     console.log('vmx: data channel opened')
     //dataChannel.send("This message was sent as a data channel was opened")
   })
   dataChannel.addEventListener('message', (event) => {
-    console.log(`vmx: data channel received: ${type}`, event.data)
+    console.log(`vmx: data channel received:`, event.data)
   })
 
   return { connection, dataChannel }
@@ -337,7 +339,7 @@ export class WebRTCPeerTransport implements Transport, Startable {
     // Create two connections, one will be used to initiate a connection to the
     // other peer, and the other one will be used to connect to another peer
     // that initiated the connection.
-    this.initiator = await createConnection('initiator')
+    this.initiator = await createConnection()
     this.initiatorAddresses = (await createMultiaddrs(this.initiator.connection))
       .map(addPeerId)
       .map((address: Multiaddr) => {
@@ -345,7 +347,7 @@ export class WebRTCPeerTransport implements Transport, Startable {
         return address.encapsulate('/memory/receiver')
       })
     await this.components.transportManager.listen(this.initiatorAddresses)
-    this.receiver = await createConnection('receiver')
+    this.receiver = await createConnection()
     this.receiverAddresses = (await createMultiaddrs(this.receiver.connection))
       .map(addPeerId)
       .map((address: Multiaddr) => {
