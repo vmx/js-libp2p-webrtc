@@ -24,9 +24,9 @@ const CERTHASH = 466
 const MEMORY = 777
 const UFRAG = 'hard-coded-ufrag-to-make-munging-easier'
 
-// The number of possible peer connections, each creates two WebRTC
-// connections.
-const NUM_CONNECTIONS = 2
+//// The number of possible peer connections, each creates two WebRTC
+//// connections.
+//const NUM_CONNECTIONS = 2
 
 /**
  * Created by converting the hexadecimal protocol code to an integer.
@@ -51,7 +51,7 @@ export interface WebRTCPeerTransportComponents {
   peerStore: PeerStore
 }
 
-const createConnection = async (connectionType: 'initiator' | 'receiver') => {
+const createConnection = async (connectionType: 'initiator' | 'receiver', peerId: PeerId) => {
   const certificate = await RTCPeerConnection.generateCertificate({
     name: 'ECDSA',
     // @ts-ignore
@@ -90,7 +90,10 @@ const createConnection = async (connectionType: 'initiator' | 'receiver') => {
     //.map(addPeerId)
     .map((address: Multiaddr) => {
        // TODO vmx 2023-01-25: check if it makes sense to use `receiver` here.
-       return address.encapsulate('/memory/' + connectionType)
+       //return address.encapsulate('/memory/' + connectionType)
+       return address
+         .encapsulate(`/memory/${connectionType}`)
+         .encapsulate(`/p2p/${peerId}`)
     })
 
   return { connection, dataChannel, addresses }
@@ -326,19 +329,36 @@ const mungeAnswer = (addresses: Multiaddr[]): {type: 'answer', sdp: string} => {
   }
 }
 
+//const finishConnection = (dc: ): Promise<Connection> => {
+//  //await waitForConnected(pc)
+//  await waitForDataChannelOpen(dc)
+//  console.log('vmx: about to upgrade outbound connection')
+//
+//  const result = await options.upgrader.upgradeOutbound(
+//    new WebRTCMultiaddrConnection({
+//      peerConnection: pc,
+//      timeline: { open: (new Date()).getTime() },
+//      remoteAddr: ma
+//    }),
+//    {
+//      skipProtection: true,
+//      skipEncryption: true,
+//      muxerFactory: new DataChannelMuxerFactory(pc)
+//    }
+//  )
+//}
 
 export class WebRTCPeerTransport implements Transport, Startable {
   private readonly _started = false
-  private initiators: { connection: RTCPeerConnection, dataChannel: RTCDataChannel, addresses: Multiaddr[] }[]
-  private receivers: { connection: RTCPeerConnection, dataChannel: RTCDataChannel, addresses: Multiaddr[] }[]
+  private initiator?: { connection: RTCPeerConnection, dataChannel: RTCDataChannel, addresses: Multiaddr[] }
+  private receiver?: { connection: RTCPeerConnection, dataChannel: RTCDataChannel, addresses: Multiaddr[] }
+  private established: { connection: RTCPeerConnection, dataChannel: RTCDataChannel, addresses: Multiaddr[] }[] = []
   //private initiatorsAddresses: Multiaddr[]
   //private receiversAddresses: Multiaddr[]
 
   constructor (
     private readonly components: WebRTCPeerTransportComponents,
   ) {
-    this.initiators = []
-    this.receivers = []
   }
 
   isStarted () {
@@ -346,27 +366,27 @@ export class WebRTCPeerTransport implements Transport, Startable {
   }
 
   async start () {
-    const addPeerId = (address: Multiaddr) => {
-      return address.encapsulate(`/p2p/${this.components.peerId}`)
-    }
+    //const addPeerId = (address: Multiaddr) => {
+    //  return address.encapsulate(`/p2p/${this.components.peerId}`)
+    //}
 
-    for (let i = 0; i < NUM_CONNECTIONS; i++) {
-      // TODO vmx 2023-01-25: check if it makes sense to use `receiver` here.
-      const initiator = await createConnection('receiver')
-      initiator.addresses = initiator.addresses.map((address) => {
-        return addPeerId(address)
-      })
-      await this.components.transportManager.listen(initiator.addresses)
-      this.initiators.push(initiator)
+    // TODO vmx 2023-01-25: check if it makes sense to use `receiver` here.
+    const initiator = await createConnection('receiver', this.components.peerId)
+    //initiator.addresses = initiator.addresses.map((address) => {
+    //  return addPeerId(address)
+    //})
+    console.log('vmx: peer transport: transport: about to call transport manager listen')
+    // TODO vmx 2023-03-04: It might make sense to call it only once with both initaor and receiver addresses.
+    await this.components.transportManager.listen(initiator.addresses)
+    this.initiator = initiator
 
-      // TODO vmx 2023-01-25: check if it makes sense to use `receiver` here.
-      const receiver = await createConnection('initiator')
-      receiver.addresses = receiver.addresses.map((address) => {
-        return addPeerId(address)
-      })
-      await this.components.transportManager.listen(receiver.addresses)
-      this.receivers.push(receiver)
-    }
+    // TODO vmx 2023-01-25: check if it makes sense to use `receiver` here.
+    const receiver = await createConnection('initiator', this.components.peerId)
+    //receiver.addresses = receiver.addresses.map((address) => {
+    //  return addPeerId(address)
+    //})
+    await this.components.transportManager.listen(receiver.addresses)
+    this.receiver = receiver
 
     console.log('vmx: transport: it should listen to some addresses now')
 
@@ -419,68 +439,36 @@ export class WebRTCPeerTransport implements Transport, Startable {
     })[0]
     console.log('vmx: connection type:', connectionType)
 
-    let pc
-    let dc
+    let connection
     switch (connectionType) {
       case 'initiator': {
+        connection = this.initiator!
+
         const offer = mungeOffer(ma)
-
-        // TODO vmx 2023-02-13: Create a function that returns the first
-        // connection that isn't used yet. Perhaps even wrap the whole
-        // connection business in a class.
-        for (const initiator of this.initiators) {
-          // Only use connection that aren't used yet
-          if (['connected', 'connecting'].includes(
-            initiator.connection.connectionState)
-          ) {
-            continue
-          }
-
-          await initiator.connection.setRemoteDescription(offer)
-          await initiator.connection.createAnswer()
-          const answer = mungeAnswer(initiator.addresses)
-          await initiator.connection.setLocalDescription(answer)
-          pc = initiator.connection
-          dc = initiator.dataChannel
-          break
-        }
+        await connection.connection.setRemoteDescription(offer)
+        await connection.connection.createAnswer()
+        const answer = mungeAnswer(connection.addresses)
+        await connection.connection.setLocalDescription(answer)
         break
       }
       case 'receiver': {
-        // TODO vmx 2023-02-13: Create a function that returns the first
-        // connection that isn't used yet. Perhaps even wrap the whole
-        // connection business in a class.
-        for (const receiver of this.receivers) {
-          // Only use connection that aren't used yet
-          if (['connected', 'connecting'].includes(
-            receiver.connection.connectionState)
-          ) {
-            continue
-          }
+        connection = this.receiver!
 
-          const answer = mungeAnswer([ma])
-          await receiver.connection.setRemoteDescription(answer)
-          pc = receiver.connection
-          dc = receiver.dataChannel
-          break
-        }
+        const answer = mungeAnswer([ma])
+        await connection.connection.setRemoteDescription(answer)
         break
       }
       default:
         throw new Error('unsupported webrtc connection mode')
     }
 
-    if (pc === undefined || dc === undefined) {
-      throw new Error('All WebRTC connections are taken')
-    }
-
     //await waitForConnected(pc)
-    await waitForDataChannelOpen(dc)
+    await waitForDataChannelOpen(connection.dataChannel)
     console.log('vmx: about to upgrade outbound connection')
 
-    const result = options.upgrader.upgradeOutbound(
+    const result = await options.upgrader.upgradeOutbound(
       new WebRTCMultiaddrConnection({
-        peerConnection: pc,
+        peerConnection: connection.connection,
         timeline: { open: (new Date()).getTime() },
         remoteAddr: ma
       }),
@@ -488,10 +476,33 @@ export class WebRTCPeerTransport implements Transport, Startable {
         skipProtection: true,
         skipEncryption: true,
         //muxerFactory: new DataChannelMuxerFactory(pc, '/webrtc-peer')
-        muxerFactory: new DataChannelMuxerFactory(pc)
+        muxerFactory: new DataChannelMuxerFactory(connection.connection)
       }
     )
-    return await result
+
+    console.log('vmx: connected! create new connection')
+    this.established.push(connection)
+
+    // The connection was successful, hence create a new connection for the
+    // next time someone wants to connect.
+    switch (connectionType) {
+     case 'initiator': {
+       // TODO vmx 2023-03-05: Think again about naming, as using `receiver` here is confusing.
+       this.initiator = await createConnection('receiver', this.components.peerId)
+       await this.components.transportManager.listen(this.initiator.addresses)
+       break
+     }
+     case 'receiver': {
+       // TODO vmx 2023-03-05: Think again about naming, as using `receiver` here is confusing.
+       this.receiver = await createConnection('initiator', this.components.peerId)
+       await this.components.transportManager.listen(this.receiver.addresses)
+       break
+     }
+     default:
+       throw new Error('unsupported webrtc connection mode')
+    }
+
+    return result
   }
 }
 
