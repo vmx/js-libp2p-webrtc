@@ -355,6 +355,7 @@ export class WebRTCPeerTransport implements Transport, Startable {
   private established: { connection: RTCPeerConnection, dataChannel: RTCDataChannel, addresses: Multiaddr[] }[] = []
   //private initiatorsAddresses: Multiaddr[]
   //private receiversAddresses: Multiaddr[]
+  private listener: Listener | null = null
 
   constructor (
     private readonly components: WebRTCPeerTransportComponents,
@@ -401,7 +402,10 @@ export class WebRTCPeerTransport implements Transport, Startable {
   }
 
   createListener (options: CreateListenerOptions): Listener {
-    return new WebRTCPeerListener()
+    if (this.listener === null) {
+      this.listener = new WebRTCPeerListener()
+    }
+    return this.listener
   }
 
   get [Symbol.toStringTag] (): string {
