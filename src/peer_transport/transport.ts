@@ -208,9 +208,8 @@ const candidateToMultiaddr = (candidate: RTCIceCandidate) => {
   if (/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(connectionAddress)) {
     addr += '/ip4'
   } else if (
-    /^[\da-f]{0,4}:[\da-f]{0,4}:[\da-f]{0,4}:[\da-f]{0,4}:[\da-f]{0,4}:[\da-f]{0,4}:[\da-f]{0,4}:[\da-f]{0,4}$/.test(
-      connectionAddress.toLowerCase()
-    )
+    ///^[\da-f]{0,4}:[\da-f]{0,4}:[\da-f]{0,4}:[\da-f]{0,4}:[\da-f]{0,4}:[\da-f]{0,4}:[\da-f]{0,4}:[\da-f]{0,4}$/.test(
+    /.*:.*:/.test(connectionAddress)
   ) {
     addr += '/ip6'
   } else {
