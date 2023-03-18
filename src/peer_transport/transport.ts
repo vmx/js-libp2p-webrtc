@@ -86,17 +86,9 @@ const createConnection = async (connectionType: 'initiator' | 'receiver', peerId
     console.log(`vmx: data channel received:`, event.data)
   })
 
-  const addresses = (await createMultiaddrs(connection))
-    //.map(addPeerId)
-    .map((address: Multiaddr) => {
-       // TODO vmx 2023-01-25: check if it makes sense to use `receiver` here.
-       //return address.encapsulate('/memory/' + connectionType)
-       return address
-         .encapsulate(`/memory/${connectionType}`)
-         .encapsulate(`/p2p/${peerId}`)
-    })
+  const address = await createMultiaddr(connection, connectionType, peerId)
 
-  return { connection, dataChannel, addresses }
+  return { connection, dataChannel, address }
 }
 
 
@@ -157,17 +149,6 @@ const waitForIceCandidates = (connection: RTCPeerConnection): Promise<RTCIceCand
   })
 }
 
-//const waitForConnected = (connection: RTCPeerConnection): Promise<void> => {
-//  return new Promise((resolve, _reject) => {
-//    connection.addEventListener('iceconnectionstatechange', () => {
-//      console.log('vmx: wait for connected:', connection.iceConnectionState)
-//      if (connection.iceConnectionState === 'completed') {
-//        resolve()
-//      }
-//    })
-//  })
-//}
-
 const waitForDataChannelOpen = (dataChannel: RTCDataChannel): Promise<void> => {
   return new Promise((resolve, _reject) => {
     dataChannel.addEventListener('open', () => {
@@ -179,11 +160,11 @@ const waitForDataChannelOpen = (dataChannel: RTCDataChannel): Promise<void> => {
 
 // Returns a Multiaddr if the candidate can be used for inbound connections,
 // else it returns `null`.
-const candidateToMultiaddr = (candidate: RTCIceCandidate) => {
+const candidateToHostPort = (candidate: RTCIceCandidate) => {
   const [
     _candidate,
     _componentId,
-    transport,
+    _transport,
     _priority,
     connectionAddress,
     port,
@@ -202,32 +183,10 @@ const candidateToMultiaddr = (candidate: RTCIceCandidate) => {
     return null
   }
 
-  let addr = ''
-
-  // Specify the host.
-  if (/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(connectionAddress)) {
-    addr += '/ip4'
-  } else if (
-    ///^[\da-f]{0,4}:[\da-f]{0,4}:[\da-f]{0,4}:[\da-f]{0,4}:[\da-f]{0,4}:[\da-f]{0,4}:[\da-f]{0,4}:[\da-f]{0,4}$/.test(
-    /.*:.*:/.test(connectionAddress)
-  ) {
-    addr += '/ip6'
-  } else {
-    // Obfuscated hosts are always IPv6.
-    addr += '/dns6'
-  }
-  addr += '/' + connectionAddress
-
-  // Specify the transport.
-  addr += '/' + transport.toLowerCase()
-
-  // Specify the port.
-  addr += '/' + port
-
-  return addr
+  return `${connectionAddress}_${port}`
 }
 
-const createMultiaddrs = async (connection: RTCPeerConnection) => {
+const createMultiaddr = async (connection: RTCPeerConnection, connectionType: 'initiator' | 'receiver', peerId: PeerId) => {
   const offer = await connection.createOffer()
   const certhash = await getCerthashFromOffer(offer)
   const mungedOffer = munge(offer)
@@ -237,30 +196,29 @@ const createMultiaddrs = async (connection: RTCPeerConnection) => {
   // console.log('vmx: icecandidate:', iceCandidates.map((candidate) => candidate.toJSON()))
   console.log('vmx: icecandidate:', iceCandidates)
 
-  const addrs = iceCandidates.reduce((acc: Multiaddr[], candidate) => {
-    let addr = candidateToMultiaddr(candidate)
-    if (addr !== null) {
-      addr += '/webrtc/certhash/' + certhash
-      acc.push(multiaddr(addr))
-      // acc.push(multiaddr)
-    }
-    return acc
-  }, [])
+  let addr = ''
 
-  console.log('vmx: addrs:', addrs)
+  const hostPortsString = iceCandidates.map((candidate) => {
+    return candidateToHostPort(candidate)
+  }).filter(Boolean).join('|')
 
-  console.log('vmx: offer: qr code data:', JSON.stringify(addrs))
+  console.log('vmx: hostportsstring:', hostPortsString)
 
-  return addrs
+  addr += '/webrtc/certhash/' + certhash
+  addr += `/memory/${connectionType}=${hostPortsString}`
+  addr += `/p2p/${peerId}`
+
+  console.log('vmx: offer: qr code data:', JSON.stringify(addr))
+
+  return multiaddr(addr)
 }
 
-const ipv = (ma: Multiaddr) => {
-  for (const proto of ma.protoNames()) {
-    if (proto.startsWith('ip')) {
-      return proto.toUpperCase()
-    }
+const ipv = (host: string) => {
+  if (/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(host)) {
+    return 'IP4'
+  } else {
+    return 'IP6'
   }
-  return 'IP6'
 }
 
 const certhashToFingerprint = (certhash: string) => {
@@ -271,11 +229,33 @@ const certhashToFingerprint = (certhash: string) => {
   return `sha-256 ${fingerprint}`
 }
 
-const ma2sdp = (addresses: Multiaddr[], withIceCandidates: boolean) => {
-  const ip = addresses[0].toOptions().host
-  const ipVersion = ipv(addresses[0])
-  const port = addresses[0].toOptions().port
-  const fingerprint = addresses[0].stringTuples().filter(([proto, value]) => {
+const ma2sdp = (ma: Multiaddr, isOffer: boolean) => {
+  const memoryValue = ma.stringTuples().filter(([protocol, value]) => {
+    return protocol === MEMORY
+  }).map(([_protocol, value]) => {
+    return value
+  })[0]
+  console.log('vmx: memory value:', memoryValue)
+  const [_, hostPortsString] = memoryValue!.split('=')
+  const hostPorts = hostPortsString.split('|').map((hostPort) => {
+    const [host, port] = hostPort.split('_')
+    return { host, port: parseInt(port) }
+  })
+  const candidates = hostPorts.map(({host, port}) => {
+    return `a=candidate:1467250027 1 UDP 1467250027 ${host} ${port} typ host`
+  })
+
+  let setup
+  if (isOffer) {
+    setup = 'active'
+  } else {
+    setup = 'passive'
+  }
+
+  const ip = hostPorts[0].host
+  const ipVersion = ipv(hostPorts[0].host)
+  const port = hostPorts[0].port
+  const fingerprint = ma.stringTuples().filter(([proto, value]) => {
     console.log('vmx: ma2sdp: fingerprint: filter: proto, value:', proto, value, CERTHASH)
     return proto === CERTHASH
   }).map(([_proto, certhash]) => {
@@ -284,12 +264,6 @@ const ma2sdp = (addresses: Multiaddr[], withIceCandidates: boolean) => {
   }).pop()
   console.log('vmx: m2sdp: fingerprint:', fingerprint)
 
-  //const candidate = `a=candidate:1467250027 1 UDP 1467250027 ${ip} ${port} typ host\n`
-  const candidates = addresses.map((address) => {
-    const ip = address.toOptions().host
-    const port = address.toOptions().port
-    return `a=candidate:1467250027 1 UDP 1467250027 ${ip} ${port} typ host`
-  })
 
   const sdp = `v=0
 o=- 0 0 IN ${ipVersion} ${ip}
@@ -298,60 +272,46 @@ c=IN ${ipVersion} ${ip}
 t=0 0
 m=application ${port} UDP/DTLS/SCTP webrtc-datachannel
 a=mid:0
-a=setup:passive
+a=setup:${setup}
 a=ice-ufrag:${UFRAG}
 a=ice-pwd:${UFRAG}
 a=fingerprint:${fingerprint}
 a=sctp-port:5000
 a=max-message-size:1073741823
 `
-  if (withIceCandidates) {
+  if (isOffer) {
     return sdp + candidates.join('\n') + '\n'
   } else {
     return sdp
   }
 }
 
-const mungeOffer = (address: Multiaddr): {type: 'offer', sdp: string} => {
+//const mungeOffer = (addresses: Multiaddr[]): {type: 'offer', sdp: string} => {
+//const mungeOffer = (ma: Multiaddr, hostPorts: {host: string, port: number][]): {type: 'offer', sdp: string} => {
+const mungeOffer = (ma: Multiaddr): {type: 'offer', sdp: string} => {
   // Construct an SDP offer from a Multiaddress.
   return {
     type: 'offer',
-    sdp: ma2sdp([address], true)
+    //sdp: ma2sdp(addresses, true)
+    sdp: ma2sdp(ma, true)
   }
 }
 
-const mungeAnswer = (addresses: Multiaddr[]): {type: 'answer', sdp: string} => {
+//const mungeAnswer = (addresses: Multiaddr[]): {type: 'answer', sdp: string} => {
+const mungeAnswer = (ma: Multiaddr): {type: 'answer', sdp: string} => {
   // Construct an SDP answer from a Multiaddress.
   return {
     type: 'answer',
-    sdp: ma2sdp(addresses, false)
+    //sdp: ma2sdp(addresses, false)
+    sdp: ma2sdp(ma, false)
   }
 }
 
-//const finishConnection = (dc: ): Promise<Connection> => {
-//  //await waitForConnected(pc)
-//  await waitForDataChannelOpen(dc)
-//  console.log('vmx: about to upgrade outbound connection')
-//
-//  const result = await options.upgrader.upgradeOutbound(
-//    new WebRTCMultiaddrConnection({
-//      peerConnection: pc,
-//      timeline: { open: (new Date()).getTime() },
-//      remoteAddr: ma
-//    }),
-//    {
-//      skipProtection: true,
-//      skipEncryption: true,
-//      muxerFactory: new DataChannelMuxerFactory(pc)
-//    }
-//  )
-//}
-
 export class WebRTCPeerTransport implements Transport, Startable {
   private readonly _started = false
-  private initiator?: { connection: RTCPeerConnection, dataChannel: RTCDataChannel, addresses: Multiaddr[] }
-  private receiver?: { connection: RTCPeerConnection, dataChannel: RTCDataChannel, addresses: Multiaddr[] }
-  private established: { connection: RTCPeerConnection, dataChannel: RTCDataChannel, addresses: Multiaddr[] }[] = []
+  private initiator?: { connection: RTCPeerConnection, dataChannel: RTCDataChannel, address: Multiaddr }
+  private receiver?: { connection: RTCPeerConnection, dataChannel: RTCDataChannel, address: Multiaddr }
+  private established: { connection: RTCPeerConnection, dataChannel: RTCDataChannel, address: Multiaddr }[] = []
   //private initiatorsAddresses: Multiaddr[]
   //private receiversAddresses: Multiaddr[]
   private listener: Listener | null = null
@@ -366,34 +326,20 @@ export class WebRTCPeerTransport implements Transport, Startable {
   }
 
   async start () {
-    //const addPeerId = (address: Multiaddr) => {
-    //  return address.encapsulate(`/p2p/${this.components.peerId}`)
-    //}
-
     // TODO vmx 2023-01-25: check if it makes sense to use `receiver` here.
     const initiator = await createConnection('receiver', this.components.peerId)
-    //initiator.addresses = initiator.addresses.map((address) => {
-    //  return addPeerId(address)
-    //})
     console.log('vmx: peer transport: transport: about to call transport manager listen')
     // TODO vmx 2023-03-04: It might make sense to call it only once with both initaor and receiver addresses.
-    await this.components.transportManager.listen(initiator.addresses)
+    await this.components.transportManager.listen([initiator.address])
     this.initiator = initiator
 
     // TODO vmx 2023-01-25: check if it makes sense to use `receiver` here.
     const receiver = await createConnection('initiator', this.components.peerId)
-    //receiver.addresses = receiver.addresses.map((address) => {
-    //  return addPeerId(address)
-    //})
-    await this.components.transportManager.listen(receiver.addresses)
+    await this.components.transportManager.listen([receiver.address])
     this.receiver = receiver
 
-    console.log('vmx: transport: it should listen to some addresses now')
-
-    //this.components.connectionManager.addEventListener('peer:connect', (event: CustomEvent<Connection>) => {
-    // const connection = event.detail
-    // console.log('dialed in: connection:', connection)
-    //})
+    console.log('vmx: transport: it should listen to some addresses now:', initiator.address.toString(), receiver.address.toString())
+    console.log('vmx: transport: it listens to addresses:', this.components.transportManager.getAddrs().map((address) => address.toString()))
   }
 
   async stop () {
@@ -429,18 +375,16 @@ export class WebRTCPeerTransport implements Transport, Startable {
    * For a circuit relay, this will be of the form
    * <relay address>/p2p/<relay-peer>/p2p-circuit/p2p/<destination-peer>/webrtc-sdp/p2p/<destination-peer>
   */
-  // @ts-ignore
   async dial (ma: Multiaddr, options: DialOptions): Promise<Connection> {
     console.log('vmx: peer transport: transport: dial: am i callled?', ma.protoNames())
 
-    //await new Promise(r => setTimeout(r, 2000));
-
-    const connectionType = ma.stringTuples().filter(([protocol, value]) => {
+    const memoryValue = ma.stringTuples().filter(([protocol, value]) => {
       return protocol === MEMORY
     }).map(([_protocol, value]) => {
       return value
     })[0]
-    console.log('vmx: connection type:', connectionType)
+    console.log('vmx: memory value:', memoryValue)
+    const [connectionType, _] = memoryValue!.split('=')
 
     let connection
     switch (connectionType) {
@@ -450,14 +394,14 @@ export class WebRTCPeerTransport implements Transport, Startable {
         const offer = mungeOffer(ma)
         await connection.connection.setRemoteDescription(offer)
         await connection.connection.createAnswer()
-        const answer = mungeAnswer(connection.addresses)
+        const answer = mungeAnswer(connection.address)
         await connection.connection.setLocalDescription(answer)
         break
       }
       case 'receiver': {
         connection = this.receiver!
 
-        const answer = mungeAnswer([ma])
+        const answer = mungeAnswer(ma)
         await connection.connection.setRemoteDescription(answer)
         break
       }
@@ -492,13 +436,13 @@ export class WebRTCPeerTransport implements Transport, Startable {
      case 'initiator': {
        // TODO vmx 2023-03-05: Think again about naming, as using `receiver` here is confusing.
        this.initiator = await createConnection('receiver', this.components.peerId)
-       await this.components.transportManager.listen(this.initiator.addresses)
+       await this.components.transportManager.listen([this.initiator.address])
        break
      }
      case 'receiver': {
        // TODO vmx 2023-03-05: Think again about naming, as using `receiver` here is confusing.
        this.receiver = await createConnection('initiator', this.components.peerId)
-       await this.components.transportManager.listen(this.receiver.addresses)
+       await this.components.transportManager.listen([this.receiver.address])
        break
      }
      default:
