@@ -277,7 +277,7 @@ a=ice-ufrag:${UFRAG}
 a=ice-pwd:${UFRAG}
 a=fingerprint:${fingerprint}
 a=sctp-port:5000
-a=max-message-size:1073741823
+a=max-message-size:262144
 `
   if (isOffer) {
     return sdp + candidates.join('\n') + '\n'
