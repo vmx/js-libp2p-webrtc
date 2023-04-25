@@ -23,6 +23,9 @@ const CERTHASH = 466
 // Multiaddress protocol used to transmit custom information.
 const MEMORY = 777
 const UFRAG = 'hard-coded-ufrag-to-make-munging-easier'
+// 262144 is the size that Safari uses by default and it seems to be that it
+// always needs to be that value.
+const MAX_MESSAGE_SIZE = 262144
 
 //// The number of possible peer connections, each creates two WebRTC
 //// connections.
@@ -133,6 +136,7 @@ const munge = (offer: RTCSessionDescriptionInit) => {
   offer.sdp = offer.sdp!
     .replace(/\na=ice-ufrag:[^\n]*\n/, '\na=ice-ufrag:' + UFRAG + '\n')
     .replace(/\na=ice-pwd:[^\n]*\n/, '\na=ice-pwd:' + UFRAG + '\n')
+    .replace(/\na=max-message-size:[^\n]*\n/, '\na=max-message-size:' + MAX_MESSAGE_SIZE + '\n')
   return offer
 }
 
@@ -277,7 +281,7 @@ a=ice-ufrag:${UFRAG}
 a=ice-pwd:${UFRAG}
 a=fingerprint:${fingerprint}
 a=sctp-port:5000
-a=max-message-size:262144
+a=max-message-size:${MAX_MESSAGE_SIZE}
 `
   if (isOffer) {
     return sdp + candidates.join('\n') + '\n'
