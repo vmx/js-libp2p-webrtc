@@ -1,5 +1,6 @@
 import { WebRTCTransport } from './private-to-private/transport.js'
 import { WebRTCDirectTransport, type WebRTCTransportDirectInit, type WebRTCDirectTransportComponents } from './private-to-public/transport.js'
+import { WebRTCNoNatTransport, type WebRTCNoNatTransportInit, type WebRTCNoNatTransportComponents } from './nonat/transport.js'
 import type { WebRTCTransportComponents, WebRTCTransportInit } from './private-to-private/transport.js'
 import type { Transport } from '@libp2p/interface-transport'
 
@@ -28,4 +29,7 @@ function webRTC (init?: WebRTCTransportInit): (components: WebRTCTransportCompon
   return (components: WebRTCTransportComponents) => new WebRTCTransport(components, init)
 }
 
-export { webRTC, webRTCDirect }
+function webRTCNoNat (init?: WebRTCNoNatTransportInit): (components: WebRTCNoNatTransportComponents) => Transport {
+  return (components: WebRTCNoNatTransportComponents) => new WebRTCNoNatTransport(components)
+}
+export { webRTC, webRTCDirect, webRTCNoNat }
