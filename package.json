@@ -28,7 +28,7 @@
   "exports": {
     ".": {
       "types": "./dist/src/index.d.ts",
-      "import": "./src/index.js"
+      "import": "./dist/src/index.js"
     }
   },
   "eslintConfig": {
@@ -125,6 +125,7 @@
   "scripts": {
     "generate": "protons src/private-to-private/pb/message.proto src/pb/message.proto",
     "build": "aegir build",
+    "prepare": "aegir build",
     "test": "aegir test -t browser",
     "test:chrome": "aegir test -t browser --cov",
     "test:firefox": "aegir test -t browser --browser firefox",
