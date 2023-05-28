@@ -428,6 +428,8 @@ export class WebRTCNoNatTransport implements Transport, Startable {
       }
     )
 
+    // Add the connection to a list of established one. This way it's kept
+    // alive even if we remove it from the lister below.
     this.established.push(connection)
 
     // The connection was successful, hence create a new connection for the
